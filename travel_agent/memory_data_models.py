@@ -1,13 +1,10 @@
-import ulid
+import ulid # (Universally Unique Lexicographically Sortable Identifier)
 from enum import Enum
-from pydantic import BaseModel, Field
 from typing import List, Optional
+from pydantic import BaseModel, Field
 from datetime import datetime
-from redisvl.index import SearchIndex
 from redisvl.schema.schema import IndexSchema
-from utils import get_redis_client
 
-redis_client = get_redis_client()
 class MemoryType(str, Enum):
     """
     Defines the type of long-term memory for categorization and retrieval.
@@ -37,7 +34,6 @@ class Memory(BaseModel):
     memory_type: MemoryType
     metadata: str
 
-
 class Memories(BaseModel):
     """
     A list of memories extracted from a conversation by an LLM.
@@ -46,7 +42,6 @@ class Memories(BaseModel):
     """
 
     memories: List[Memory]
-
 
 class StoredMemory(Memory):
     """A stored long-term memory"""
@@ -57,10 +52,6 @@ class StoredMemory(Memory):
     user_id: Optional[str] = None
     thread_id: Optional[str] = None
     memory_type: Optional[MemoryType] = None
-
-
-
-# MEMORY SCHEMA
 
 memory_schema = IndexSchema.from_dict({
         "index": {
@@ -81,7 +72,7 @@ memory_schema = IndexSchema.from_dict({
                 "type": "vector",
                 "attrs": {
                     "algorithm": "flat",
-                    "dims": 1536,
+                    "dims": 3072,  # googleAI embedding dimension
                     "distance_metric": "cosine",
                     "datatype": "float32",
                 },
@@ -89,16 +80,3 @@ memory_schema = IndexSchema.from_dict({
         ],
     }
 )
-
-
-def create_memory_index():
-    try:
-        long_term_memory_index = SearchIndex(
-            schema=memory_schema,
-            redis_client=redis_client,
-            validate_on_load=True
-        )
-        long_term_memory_index.create(overwrite=True)
-        print("Long-term memory index ready")
-    except Exception as e:
-        print(f"Error creating index: {e}")
