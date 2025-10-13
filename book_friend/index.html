@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Book Viewer</title>
+  <style>
+    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 24px; background:#f7f8fb; color:#111; }
+    .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 20px 28px; border-radius: 12px; box-shadow: 0 6px 18px rgba(12,15,20,0.06); }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    p.desc { color: #444; margin-top: 0; margin-bottom: 16px; }
+    .controls { display:flex; gap:8px; align-items:center; margin-bottom: 16px; }
+    button { background:#2563eb; color:#fff; border:0; padding:8px 12px; border-radius:8px; cursor:pointer; }
+    button:disabled { opacity:0.5; cursor: not-allowed; }
+    .page-number { font-weight:600; margin-left: 8px; }
+    .page-list { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .page-chip { background:#eef2ff; padding:6px 10px; border-radius:8px; cursor:pointer; }
+    .page-chip.active { background:#c7d2fe; font-weight:700; }
+    .content { white-space:pre-wrap; line-height:1.6; padding:16px; background:#fbfdff; border-radius:8px; border:1px solid #eef2ff; min-height:160px; }
+    .error { color: #b91c1c; }
+    .meta { color:#6b7280; font-size:14px; margin-bottom:10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 id="title">Loading…</h1>
+    <div class="meta" id="meta"></div>
+    <p class="desc" id="desc"></p>
+
+    <div class="controls">
+      <button id="prevBtn">◀ Prev</button>
+      <button id="nextBtn">Next ▶</button>
+      <div class="page-number" id="pageNumber"></div>
+      <div style="flex:1"></div>
+      <div id="status"></div>
+    </div>
+
+    <div class="content" id="content">...</div>
+
+    <div class="page-list" id="pageList"></div>
+
+    <div style="margin-top:14px">
+      <small>Tip: run a static server in this folder (e.g. <code>python -m http.server 8000</code>) so browser can fetch <code>book_data.json</code>.</small>
+    </div>
+
+    <div id="error" class="error" style="margin-top:12px"></div>
+  </div>
+
+  <script>
+    // Config
+    const DATA_URL = './book_data.json'; // must be in same folder and served by http server
+
+    // State
+    let book = null;
+    let pageKeys = []; // sorted keys (strings)
+    let currentIndex = 0;
+
+    // Elements
+    const titleEl = document.getElementById('title');
+    const descEl = document.getElementById('desc');
+    const metaEl = document.getElementById('meta');
+    const contentEl = document.getElementById('content');
+    const pageNumberEl = document.getElementById('pageNumber');
+    const pageListEl = document.getElementById('pageList');
+    const statusEl = document.getElementById('status');
+    const errorEl = document.getElementById('error');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+
+    async function loadBook() {
+      try {
+        statusEl.textContent = 'Fetching book_data.json…';
+        const res = await fetch(DATA_URL, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        book = data;
+        normalizeAndRender();
+        statusEl.textContent = '';
+      } catch (err) {
+        console.error(err);
+        errorEl.textContent = 'Failed to load book_data.json — make sure it is served and valid JSON.';
+        statusEl.textContent = '';
+        titleEl.textContent = 'No book';
+        contentEl.textContent = '';
+      }
+    }
+
+    function normalizeAndRender() {
+      // Title & desc
+      titleEl.textContent = book.title ?? 'Untitled';
+      descEl.textContent = book.book_desc ?? '';
+      metaEl.textContent = book.pages ? `${Object.keys(book.pages).length} page(s)` : '';
+
+      // Normalize page keys to strings and sort numerically if possible
+      const rawKeys = Object.keys(book.pages ?? {});
+      pageKeys = rawKeys.slice().sort((a, b) => {
+        const ai = Number(a), bi = Number(b);
+        if (!isNaN(ai) && !isNaN(bi)) return ai - bi;
+        return a.localeCompare(b);
+      });
+
+      if (pageKeys.length === 0) {
+        contentEl.textContent = 'No pages available.';
+        pageNumberEl.textContent = '';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+        return;
+      }
+
+      // initial index
+      currentIndex = 0;
+      renderPageList();
+      renderPage(currentIndex);
+    }
+
+    function renderPageList() {
+      pageListEl.innerHTML = '';
+      pageKeys.forEach((k, idx) => {
+        const chip = document.createElement('div');
+        chip.className = 'page-chip' + (idx === currentIndex ? ' active' : '');
+        chip.textContent = `Page ${k}`;
+        chip.addEventListener('click', () => {
+          renderPage(idx);
+        });
+        pageListEl.appendChild(chip);
+      });
+    }
+
+    function renderPage(idx) {
+      if (!pageKeys.length) return;
+      currentIndex = Math.max(0, Math.min(idx, pageKeys.length - 1));
+      const key = pageKeys[currentIndex];
+      const content = book.pages?.[key] ?? '';
+      pageNumberEl.textContent = `Page ${key} (${currentIndex + 1}/${pageKeys.length})`;
+      contentEl.textContent = content;
+      // update controls
+      prevBtn.disabled = currentIndex === 0;
+      nextBtn.disabled = currentIndex === pageKeys.length - 1;
+      // update active chip
+      Array.from(pageListEl.children).forEach((c, i) => {
+        c.classList.toggle('active', i === currentIndex);
+      });
+    }
+
+    // Controls
+    prevBtn.addEventListener('click', () => renderPage(currentIndex - 1));
+    nextBtn.addEventListener('click', () => renderPage(currentIndex + 1));
+
+    // Load initially
+    loadBook();
+  </script>
+</body>
+</html>
